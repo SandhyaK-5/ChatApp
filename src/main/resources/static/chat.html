@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spring Boot ChatApp</title>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f6fa;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+    #chat-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    #messages {
+      list-style: none;
+      padding: 0;
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      background: #fafafa;
+    }
+
+    #messages li {
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      background: #e7f0ff;
+    }
+
+    .username {
+      font-weight: bold;
+    }
+
+    .timestamp {
+      color: #888;
+      font-size: 0.8em;
+      margin-left: 8px;
+    }
+
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    #typingIndicator {
+      color: #666;
+      font-style: italic;
+      font-size: 0.9em;
+      margin-top: 6px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h1>💬 Spring Boot Chat</h1>
+  <div id="chat-container">
+    <div id="controls">
+      <input id="from" placeholder="Your name" />
+      <input id="text" placeholder="Type a message..." oninput="notifyTyping()" />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div id="typingIndicator"></div>
+    <ul id="messages"></ul>
+  </div>
+
+  <script>
+    let stompClient = null;
+    const userColors = {};
+    let typingTimeout = null;
+
+    function connect() {
+      const socket = new SockJS("/chat");
+      stompClient = Stomp.over(socket);
+      stompClient.connect({}, function () {
+        stompClient.subscribe("/topic/messages", function (messageOutput) {
+          const message = JSON.parse(messageOutput.body);
+          showMessage(message.from, message.text);
+        });
+
+        stompClient.subscribe("/topic/typing", function (event) {
+          showTyping(event.body);
+        });
+      });
+    }
+
+    function getUserColor(username) {
+      if (!userColors[username]) {
+        const hue = Math.floor(Math.random() * 360);
+        userColors[username] = `hsl(${hue}, 70%, 60%)`;
+      }
+      return userColors[username];
+    }
+
+    function sendMessage() {
+      const from = document.getElementById("from").value.trim();
+      const text = document.getElementById("text").value.trim();
+      if (from && text) {
+        stompClient.send("/app/sendMessage", {}, JSON.stringify({ from, text }));
+        document.getElementById("text").value = "";
+      }
+    }
+
+    function notifyTyping() {
+      const from = document.getElementById("from").value.trim();
+      if (from) {
+        stompClient.send("/app/typing", {}, from);
+      }
+    }
+
+    function showTyping(username) {
+      const indicator = document.getElementById("typingIndicator");
+      indicator.textContent = `🟢 ${username} is typing...`;
+
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        indicator.textContent = "";
+      }, 2000);
+    }
+
+    function showMessage(username, text) {
+      const li = document.createElement("li");
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const color = getUserColor(username);
+      li.innerHTML = `<span class="username" style="color:${color}">${username}</span>: ${text}
+                      <span class="timestamp">${time}</span>`;
+      document.getElementById("messages").appendChild(li);
+      document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+    }
+
+    connect();
+  </script>
+</body>
+</html>
